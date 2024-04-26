@@ -1,0 +1,212 @@
+---
+title: "Temperature Forecasting"
+author: "Assignment 2"
+date: "2024-03-23"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate) # date manipulation
+library(padr) # TS padding
+library(zoo) # imputasi missing value TS
+library(fpp) # TS dataset
+library(TSstudio) # TS interactive viz
+
+library(forecast) # algoritma forecasting
+library(TTR) # SMA function
+library(tseries) # adf.test
+```
+
+```{r}
+# Membaca data
+training.data <- read.csv("DailyDelhiClimateTrain.csv")
+testing.data <- read.csv("DailyDelhiClimateTest.csv")
+
+training.data <- training.data[,c(1,2)]
+training.data$date <- lubridate::ymd(training.data$date)
+training.data <- training.data %>%
+  pad()
+
+testing.data <- testing.data[,c(1,2)]
+testing.data$date <- lubridate::ymd(testing.data$date)
+testing.data <- testing.data %>%
+  pad()
+```
+```{r}
+head(training.data)
+head(testing.data)
+```
+
+```{r}
+colSums(is.na(training.data))
+```
+
+```{r}
+colSums(is.na(testing.data))
+```
+
+```{r}
+ggplot(data = training.data, aes(x = date, y = meantemp)) +
+  geom_line(col = "red") +
+  labs(title = "Plotting the time series",
+       x = "Date",
+       y = "Mean Temperature")
+```
+
+
+```{r}
+# quarter
+quarter_ts <- ts(data = training.data$meantemp,
+              frequency = 7*4*3,
+              start = c(2013, 1))
+# tahunan
+year_ts <- ts(data = training.data$meantemp,
+              frequency = 7*4*12,
+              start = c(2017, 01))
+```
+
+
+```{r}
+q_dec <- decompose(quarter_ts)
+plot(q_dec)
+```
+
+
+```{r}
+y_dec <- decompose(year_ts)
+plot(y_dec)
+```
+
+
+```{r}
+training_ts <- msts(data = training.data$meantemp,
+     seasonal.periods = c(7*4*3,7*4*12 ))
+training_ts %>% mstl() %>% autoplot()
+```
+
+## Holt WInter Model
+
+```{r}
+# fitting model with seasonal = additive
+holt_model <- HoltWinters(training_ts, seasonal = "additive")
+cat(holt_model$alpha, 
+    holt_model$beta, 
+    holt_model$gamma)
+```
+
+
+```{r}
+# forecasting holt winters
+holt_model_forecast <- forecast(holt_model, 
+                                h = 114)
+
+# model accuracy
+holt_performance <- data.frame(accuracy(holt_model_forecast, 
+                              testing.data$meantemp))
+holt_performance
+```
+
+
+```{r}
+# visualization
+training_ts %>% 
+  autoplot(series = "Actual") +
+  autolayer(holt_model$fitted, series = "Holt")
+```
+
+
+```{r}
+# forecasting mean temperature for 3 months
+plot(forecast(holt_model, h = 114))
+```
+
+
+
+```{r}
+# model fitting
+arima_model <- stlm(training_ts, 
+                    method = "arima")
+
+# forecasting mean temperature for 3 months
+arima_model_forecast <- forecast(arima_model, 
+                                 h = 114)
+
+# model accuracy
+arima_performance<- data.frame(accuracy(arima_model_forecast, 
+                                testing.data$meantemp))
+arima_performance
+```
+
+
+```{r}
+# visualization
+training_ts %>% 
+  autoplot(series = "Actual") +
+  autolayer(arima_model$fitted, series = "ARIMA")
+```
+
+```{r}
+# forecasting mean temperature for 3 months
+plot(forecast(arima_model, 
+              h = 114))
+```
+
+```{r}
+# model fitting dengan ETS
+ets_model <- stlm(training_ts, 
+                  method = "ets")
+
+# forecasting
+ets_model_forecast <- forecast(ets_model, 
+                               h = 114)
+
+# model accuracy
+ets_performance <- data.frame(accuracy(ets_model_forecast, 
+                               testing.data$meantemp))
+ets_performance
+```
+
+
+```{r}
+# visualization
+training_ts %>% 
+  autoplot(series = "Actual") +
+  autolayer(ets_model$fitted, series = "ETS")
+```
+
+
+```{r}
+# forecasting mean temperature for 3 months
+plot(forecast(ets_model, h = 114))
+```
+
+
+```{r}
+hist(arima_model$residuals, breaks = 100)
+```
+
+```{r}
+shapiro.test(arima_model$residuals)
+```
+
+```{r}
+Box.test(arima_model$residuals, type = "Ljung-Box")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
